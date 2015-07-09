@@ -55,13 +55,13 @@ def status(full=True):
     if not verbose: clearScreen()
 
     if full:
-        sys.stdout.flush()
+        print ""
         sys.stdout.write( "Bytes to encode: " + targetbytes )
         sys.stdout.write( "\n\n\tGoal Sum: %08x" % int(sumbytes, 16))
-        sys.stdout.write("\n\tCurrent:  %08x" % int(current, 16))
         sys.stdout.write("\n\tLast:     %08x" % int(lastresult, 16))
+        sys.stdout.write("\n\tCurrent:  %08x" % int(current, 16))
         sys.stdout.write("\n")
-        sys.stdout.write("\n" + "Last try: " + lasttry)
+        sys.stdout.write("\n" + "\tLast try: " + lasttry)
         sys.stdout.write("\n")
         for i in range(len(ops)):
             sys.stdout.write("\nSubtract " + str(i+1) + " : " + ops[i])
@@ -74,6 +74,13 @@ def makeHexStr(inputdata):
     returnval = "0x" + data[::-1].encode('hex')
     if verbose: print "returnval = " + returnval
     return returnval
+
+def reset():
+    global ops, current, lasttry, lastresult
+    ops = []
+    current = "0x00000000"
+    lasttry = "0x00000000"
+    lastresult = "0x00000000"
 
 def add(hexstr):
     global current
@@ -89,18 +96,20 @@ def calc(inputdata):
     status()
 
     try:
-        while sumbytes not in current:
+        while sumbytes[2:] not in current:
             accept = False
             while not accept:
-                optry = raw_input("\nEnter a hex string (ctrl+c to exit):\n ")
+                optry = raw_input("\nEnter a hex string:"
+                                  "\nFormat 0x00112233"
+                                  "\n(ctrl+c to move to next value):\n ")
                 add(optry)
                 lastresult = current
                 lasttry = optry
                 ops.append(optry)
                 print ""
                 status()
-                if sumbytes not in current:
-                    accept = query_yes_no("\nKeep new value? :", default="no")
+
+                accept = query_yes_no("\nKeep new value? :", default="no")
                 if not accept:
                     ops.pop()
                     current = hex(int(current, 16) - int(lasttry, 16))
@@ -109,12 +118,13 @@ def calc(inputdata):
         #When done calculating (or after keyboard interrupt) save progress in results dict
         results[targetbytes] = ops
 
-        #clear ops
-        ops = []
+        #reset fields
+        reset()
 
     except KeyboardInterrupt:
         print ""
         print ""
+        reset()
         results[targetbytes] = ops
         ops = []
         current = "0x00000000"
