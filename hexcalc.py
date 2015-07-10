@@ -12,6 +12,8 @@ lasttry = ''
 lastresult = current
 ops = []
 results = {}
+allowed = ''
+checkbad = False
 
 
 def query_yes_no(question, default="yes"):
@@ -56,13 +58,13 @@ def status(full=True):
 
     if full:
         print ""
-        sys.stdout.write( "Bytes to encode: " + targetbytes )
-        sys.stdout.write( "\n\n\tGoal Sum: %08x" % int(sumbytes, 16))
-        sys.stdout.write("\n\tLast:     %08x" % int(lastresult, 16))
-        sys.stdout.write("\n\tCurrent:  %08x" % int(current, 16))
-        sys.stdout.write("\n")
-        sys.stdout.write("\n" + "\tLast try: " + lasttry)
-        sys.stdout.write("\n")
+        print "Bytes to encode: " + targetbytes
+        print "\n\tGoal Sum: %08x" % int(sumbytes, 16)
+        print "\tLast:     %08x" % int(lastresult, 16)
+        print "\tCurrent:  %08x" % int(current, 16)
+        print ""
+        print "\tLast try: " + lasttry
+        print ""
         for i in range(len(ops)):
             sys.stdout.write("\nSubtract " + str(i+1) + " : " + ops[i])
 
@@ -72,7 +74,7 @@ def makeHexStr(inputdata):
     data = data.strip('"')
     data = data.decode('string-escape')
     returnval = "0x" + data[::-1].encode('hex')
-    if verbose: print "returnval = " + returnval
+    if verbose: print "VERBOSE: returnval = " + returnval
     return returnval
 
 def reset():
@@ -86,12 +88,31 @@ def add(hexstr):
     global current
     current = hex(int(current, 16) + int(hexstr, 16))
 
+def charCheck(data):
+    global allowed
+
+    badchar = []
+    if checkbad:
+        if verbose: print "\nVERBOSE: Checking data: " + data
+        hexstr = data[2:].decode('hex')
+        if verbose: print "\nVERBOSE: Checking hexstr: " + hexstr
+        for byte in hexstr:
+            if byte not in allowed:
+                badchar.append(byte)
+
+        if len(badchar) > 0:
+            print "\n\nWARNING - The following byte(s) are not on the allowed list:"
+            for ch in badchar:
+                print ch.encode('hex'),
+            print ""
+
+
 def calc(inputdata):
     global start, targetbytes, ops, sumbytes, lasttry, current, lastresult, results
 
-    if verbose: print inputdata
+    if verbose: print "VERBOSE: InputData: " + inputdata
     targetbytes = makeHexStr(inputdata)
-    if verbose: print targetbytes
+    if verbose: print "VERBOSE: targetbytes: " + targetbytes
     sumbytes = hex(0xFFFFFFFF - int(targetbytes, 16) + 0x1)
     status()
 
@@ -99,21 +120,32 @@ def calc(inputdata):
         while sumbytes[2:] not in current:
             accept = False
             while not accept:
+                print ""
                 optry = raw_input("\nEnter a hex string:"
                                   "\nFormat 0x00112233"
-                                  "\n(ctrl+c to move to next value):\n ")
-                add(optry)
-                lastresult = current
-                lasttry = optry
-                ops.append(optry)
-                print ""
-                status()
-
-                accept = query_yes_no("\nKeep new value? :", default="no")
-                if not accept:
-                    ops.pop()
-                    current = hex(int(current, 16) - int(lasttry, 16))
+                                  "\n(ctrl+c to move to next value or type 'back'):\n ")
+                if optry.lower() != 'back':
+                    add(optry)
+                    lastresult = current
+                    lasttry = optry
+                    ops.append(optry)
+                    print ""
                     status()
+                    charCheck(optry)
+                    accept = query_yes_no("\nKeep new value? :", default="no")
+                    if not accept:
+                        ops.pop()
+                        current = hex(int(current, 16) - int(lasttry, 16))
+                        status()
+                    else:
+                        status()
+                else:
+                    try:
+                        ops.pop()
+                        current = hex(int(current, 16) - int(lasttry, 16))
+                        status()
+                    except IndexError:
+                        print "No values have been entered yet."
 
         #When done calculating (or after keyboard interrupt) save progress in results dict
         results[targetbytes] = ops
@@ -144,7 +176,7 @@ def printResults():
 
 
 def main():
-    global verbose
+    global verbose, allowed, checkbad
 
     parser = argparse.ArgumentParser(description="Hex Calculation")
     parser.add_argument("-v",
@@ -154,10 +186,10 @@ def main():
     parser.add_argument("-f",
                         "--infile",
                         required=True,
-                        help="Path to file with binary strings - 4 bytes per line ('\x75\xe7\x3f\x34')")
+                        help="Path to file with binary strings - 4 bytes per line ('\\x75\\xe7\\x3f\\x34')")
     parser.add_argument("-a",
                         "--charfile",
-                        help="Path to file with list of allowed characters in format '\x75' ")
+                        help="Path to file with list of allowed characters in format '\\x75' ")
     args = parser.parse_args()
 
     if args.verbose: verbose = args.verbose
@@ -167,6 +199,16 @@ def main():
     except:
         print "Error reading input file " + args.infile + ". Exiting.."
         sys.exit(1)
+
+    if args.charfile:
+        try:
+            cf = open(args.charfile, 'r')
+            allowed = cf.read().decode('string-escape')
+            allowed = allowed.rstrip()
+            allowed = allowed.strip('"')
+            checkbad = True
+        except IOError:
+            print "Error reading allowed character file " + args.charfile + ". Exiting.."
 
     for line in f.readlines():
         calc(line)
